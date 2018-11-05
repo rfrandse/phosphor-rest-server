@@ -826,8 +826,7 @@ class SessionHandler(MethodHandler):
                     group_name = group.gr_name
                     break
             except StopIteration:
-                # Return 'priv-user' if fetching the LDAP group name fails.
-                return False, self.PRIV_USER
+                abort(403, 'LDAP group information not available')
 
         # Check if privilege mapping exists for the LDAP group.
         try:
@@ -841,9 +840,10 @@ class SessionHandler(MethodHandler):
                             return True, prop[self.PRIV_PROP]
 
         except dbus.exceptions.DBusException:
-            return False, self.PRIV_USER
+            abort(403, 'LDAP group privilege mapping does not exist')
 
-        return False, self.PRIV_USER
+        abort(403, 'LDAP group privilege mapping does not exist')
+
 
     def get_user_privilege(self, user):
         status_local, priv_local = self.local_user_privilege(user)
@@ -869,6 +869,7 @@ class PasswordChangeHandler(RouteHandler):
     rules = '/xyz/openbmc_project/user/root/action/SetPassword'
 
     content_type = 'application/json'
+    suppress_json_logging = True
 
     def __init__(self, app, bus):
         super(PasswordChangeHandler, self).__init__(
@@ -897,7 +898,7 @@ class PasswordChangeHandler(RouteHandler):
             index = err_str.find("]")
             index = (index + 2) if index > 0 else 0
             err_str = err_str[index:]
-            abort(401, err_str)
+            abort(400, err_str)
 
     def find(self, **kw):
         pass
@@ -1838,14 +1839,13 @@ class PrivilegePlugin(object):
             self.app = app
 
         def __call__(self, *a, **kw):
-            # HTTP verb "GET" is authorized irrespective of the privilege level
-            # of the session. If the session has "priv-admin" privilege all the
-            # REST API's can be executed.
+            # If the session has "priv-admin" privilege all the REST API's can
+            # be executed. HTTP verb "GET" is authorized for any privilege level
+            # less than "priv-admin".
             if request.method == 'GET':
                 return self.callback(*a, **kw)
 
             session = self.app.session_handler.get_session_from_cookie()
-            privilege = None
             if session is not None:
                 privilege = session['privilege']
                 if privilege != 'priv-admin':
@@ -1853,7 +1853,7 @@ class PrivilegePlugin(object):
                 else:
                     return self.callback(*a, **kw)
             else:
-                 abort(401, 'Session not found')
+                 abort(403, 'Session not found')
 
     def apply(self, callback, route):
         cb = route.get_undecorated_callback()
