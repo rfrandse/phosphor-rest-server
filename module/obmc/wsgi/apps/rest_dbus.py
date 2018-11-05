@@ -844,6 +844,7 @@ class SessionHandler(MethodHandler):
 
         abort(403, 'LDAP group privilege mapping does not exist')
 
+
     def get_user_privilege(self, user):
         status_local, priv_local = self.local_user_privilege(user)
         if status_local:
